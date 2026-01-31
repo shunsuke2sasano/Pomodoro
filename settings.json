@@ -1,0 +1,11 @@
+{
+  "window_x": 3008,
+  "window_y": 309,
+  "always_on_top": true,
+  "sound_on": true,
+  "preset_work": 25,
+  "preset_short": 5,
+  "preset_long": 15,
+  "last_mode": "work",
+  "theme_name": "light"
+}
