@@ -11,6 +11,7 @@ from PySide6.QtGui import (
     QPainterPath,
     QPen,
     QBrush,
+    QColor,
     QFont,
     QFontMetrics,
     QRegion,
@@ -121,7 +122,7 @@ class PomodoroWidget(QWidget):
 
         show_notification(title, msg)
         if self._settings.sound_on:
-            play_sound("finish")
+            play_sound(self._settings.finish_sound)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.LeftButton:
@@ -222,6 +223,11 @@ class PomodoroWidget(QWidget):
             merged.update(theme)
         return merged
 
+    def _with_alpha(self, color: QColor, alpha: int) -> QColor:
+        c = QColor(color)
+        c.setAlpha(alpha)
+        return c
+
     def _set_theme(self, theme_name: str) -> None:
         if theme_name not in THEMES:
             theme_name = DEFAULT_THEME
@@ -271,6 +277,42 @@ class PomodoroWidget(QWidget):
             act.setChecked(self._settings.theme_name == theme_key)
             act.setActionGroup(theme_group)
             act.triggered.connect(lambda checked, t=theme_key: self._set_theme(t))
+
+        menu.addSeparator()
+
+        sound_menu = menu.addMenu("Finish Sound")
+        sound_group = QActionGroup(sound_menu)
+        sound_group.setExclusive(True)
+        sound_labels = {
+            "beep": "Beep",
+            "chime": "Chime",
+            "premium": "Premium",
+        }
+        for key, label in sound_labels.items():
+            act = sound_menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(self._settings.finish_sound == key)
+            act.setActionGroup(sound_group)
+            act.triggered.connect(lambda checked, k=key: self._set_finish_sound(k))
+
+        menu.addSeparator()
+
+        transparency_menu = menu.addMenu("Transparency")
+        transparency_group = QActionGroup(transparency_menu)
+        transparency_group.setExclusive(True)
+        percent_options = list(range(10, 101, 10))
+        current_alpha = int(self._settings.bg_opacity)
+        alpha_values = [int(255 * p / 100) for p in percent_options]
+        closest_alpha = min(alpha_values, key=lambda a: abs(a - current_alpha))
+        for p, alpha in zip(percent_options, alpha_values):
+            label = f"{p}%"
+            if p == 100:
+                label = "100% (Solid)"
+            act = transparency_menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(alpha == closest_alpha)
+            act.setActionGroup(transparency_group)
+            act.triggered.connect(lambda checked, v=alpha: self._set_bg_opacity(v))
 
         menu.addSeparator()
 
@@ -331,6 +373,15 @@ class PomodoroWidget(QWidget):
         self._settings.sound_on = checked
         self._settings.save()
 
+    def _set_finish_sound(self, key: str) -> None:
+        self._settings.finish_sound = key
+        self._settings.save()
+
+    def _set_bg_opacity(self, value: int) -> None:
+        self._settings.bg_opacity = value
+        self._settings.save()
+        self.update()
+
     def paintEvent(self, event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
@@ -349,6 +400,7 @@ class PomodoroWidget(QWidget):
 
     def _draw_shadow(self, p: QPainter, w: int, h: int) -> None:
         theme = self._current_theme()
+        alpha = int(self._settings.bg_opacity)
         shadow_path = QPainterPath()
         shadow_path.addRoundedRect(
             QRectF(SHADOW_OFFSET, SHADOW_OFFSET, w, h),
@@ -356,12 +408,14 @@ class PomodoroWidget(QWidget):
         )
         p.save()
         p.setPen(Qt.NoPen)
-        p.setBrush(QBrush(theme.get("shadow", C_SHADOW)))
+        shadow_alpha = min(alpha, 120)
+        p.setBrush(QBrush(self._with_alpha(theme.get("shadow", C_SHADOW), shadow_alpha)))
         p.drawPath(shadow_path)
         p.restore()
 
     def _draw_background(self, p: QPainter, w: int, h: int) -> None:
         theme = self._current_theme()
+        alpha = int(self._settings.bg_opacity)
         bg_path = QPainterPath()
         bg_path.addRoundedRect(
             QRectF(0, 0, w, h),
@@ -369,7 +423,7 @@ class PomodoroWidget(QWidget):
         )
         p.save()
         p.setPen(Qt.NoPen)
-        p.setBrush(QBrush(theme.get("bg_outer", C_BG_OUTER)))
+        p.setBrush(QBrush(self._with_alpha(theme.get("bg_outer", C_BG_OUTER), alpha)))
         p.drawPath(bg_path)
         p.restore()
 
@@ -406,6 +460,7 @@ class PomodoroWidget(QWidget):
 
     def _draw_disc(self, p: QPainter, w: int, h: int) -> None:
         theme = self._current_theme()
+        alpha = int(self._settings.bg_opacity)
         cx, cy = w / 2, h / 2
         radius = min(w, h) / 2 - DISC_MARGIN - max(TICK_LENGTH_MAJOR, TICK_LENGTH_MINOR) - 2
         disc_rect = QRectF(
@@ -415,7 +470,7 @@ class PomodoroWidget(QWidget):
 
         p.save()
         p.setPen(Qt.NoPen)
-        p.setBrush(QBrush(theme.get("bg_disc", C_BG_DISC)))
+        p.setBrush(QBrush(self._with_alpha(theme.get("bg_disc", C_BG_DISC), alpha)))
         p.drawEllipse(disc_rect)
         p.restore()
 
@@ -444,7 +499,7 @@ class PomodoroWidget(QWidget):
         )
         p.save()
         p.setPen(Qt.NoPen)
-        p.setBrush(QBrush(theme.get("bg_inner", C_BG_INNER)))
+        p.setBrush(QBrush(self._with_alpha(theme.get("bg_inner", C_BG_INNER), alpha)))
         p.drawEllipse(inner_rect)
         p.restore()
 

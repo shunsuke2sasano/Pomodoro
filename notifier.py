@@ -2,6 +2,7 @@
 Windows notifications and sounds.
 """
 
+from pathlib import Path
 import threading
 
 
@@ -43,25 +44,62 @@ try {{
         pass
 
 
-def play_sound(sound_type: str = "default") -> None:
-    """Play a simple system beep sound (best-effort)."""
+_SOUND_EFFECTS: dict[str, object] = {}
+_SOUND_FILES = {
+    "chime": "sounds/chime.wav",
+    "premium": "sounds/premium.wav",
+}
 
-    def _play() -> None:
+
+def play_sound(sound_key: str = "beep") -> None:
+    """Play finish sound by key (best-effort)."""
+
+    def _beep() -> None:
         try:
             import winsound
-            if sound_type == "finish":
-                for _ in range(3):
-                    winsound.Beep(880, 200)
-                    winsound.Beep(1100, 150)
-            else:
-                winsound.Beep(660, 300)
-        except ImportError:
-            pass
+            winsound.Beep(880, 200)
+            winsound.Beep(1100, 150)
         except Exception:
             pass
 
-    t = threading.Thread(target=_play, daemon=True)
-    t.start()
+    if sound_key == "beep":
+        t = threading.Thread(target=_beep, daemon=True)
+        t.start()
+        return
+
+    rel_path = _SOUND_FILES.get(sound_key)
+    if not rel_path:
+        t = threading.Thread(target=_beep, daemon=True)
+        t.start()
+        return
+
+    path = Path(__file__).resolve().parent / rel_path
+    if not path.exists():
+        t = threading.Thread(target=_beep, daemon=True)
+        t.start()
+        return
+
+    try:
+        from PySide6.QtMultimedia import QSoundEffect
+        from PySide6.QtCore import QUrl
+    except Exception:
+        t = threading.Thread(target=_beep, daemon=True)
+        t.start()
+        return
+
+    effect = _SOUND_EFFECTS.get(sound_key)
+    if effect is None:
+        effect = QSoundEffect()
+        effect.setSource(QUrl.fromLocalFile(str(path)))
+        effect.setLoopCount(1)
+        effect.setVolume(0.9)
+        _SOUND_EFFECTS[sound_key] = effect
+
+    try:
+        effect.play()
+    except Exception:
+        t = threading.Thread(target=_beep, daemon=True)
+        t.start()
 
 
 def _escape_xml(s: str) -> str:

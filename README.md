@@ -30,11 +30,15 @@ python main.py
 - Drag outside dial: move window
 - Right click: context menu (Reset / Mode / Presets / Theme / Always on Top / Sound / Quit)
 
+## Sounds
+Place WAV files under `sounds/` (e.g., `sounds/chime.wav`, `sounds/premium.wav`). If files are missing, the app falls back to a simple beep without crashing.
+
 ## Settings (settings.json)
 Stored automatically on exit:
 - window position
 - always-on-top
 - sound on/off
+- finish sound
 - preset minutes
 - last mode
 - theme name

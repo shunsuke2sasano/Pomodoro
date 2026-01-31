@@ -1,8 +1,10 @@
 {
-  "window_x": 3008,
-  "window_y": 309,
+  "window_x": 3517,
+  "window_y": 234,
   "always_on_top": true,
   "sound_on": true,
+  "bg_opacity": 25,
+  "finish_sound": "premium",
   "preset_work": 25,
   "preset_short": 5,
   "preset_long": 15,

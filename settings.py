@@ -21,6 +21,8 @@ _DEFAULTS = {
     "window_y": 100,
     "always_on_top": True,
     "sound_on": True,
+    "bg_opacity": 210,
+    "finish_sound": "premium",
     "preset_work": DEFAULT_WORK_MIN,
     "preset_short": DEFAULT_SHORT_MIN,
     "preset_long": DEFAULT_LONG_MIN,
@@ -94,6 +96,22 @@ class Settings:
     @sound_on.setter
     def sound_on(self, v: bool):
         self.set("sound_on", v)
+
+    @property
+    def bg_opacity(self) -> int:
+        return int(self.get("bg_opacity"))
+
+    @bg_opacity.setter
+    def bg_opacity(self, v: int):
+        self.set("bg_opacity", max(0, min(255, int(v))))
+
+    @property
+    def finish_sound(self) -> str:
+        return str(self.get("finish_sound"))
+
+    @finish_sound.setter
+    def finish_sound(self, v: str):
+        self.set("finish_sound", v)
 
     @property
     def preset_work(self) -> int:
