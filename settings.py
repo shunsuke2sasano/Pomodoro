@@ -22,7 +22,10 @@ _DEFAULTS = {
     "always_on_top": True,
     "sound_on": True,
     "bg_opacity": 210,
-    "finish_sound": "premium",
+    "finish_sound": "cuckoo",
+    "focus_finish_sound": "",
+    "break_finish_sound": "",
+    "sound_volume": 0.7,
     "preset_work": DEFAULT_WORK_MIN,
     "preset_short": DEFAULT_SHORT_MIN,
     "preset_long": DEFAULT_LONG_MIN,
@@ -112,6 +115,45 @@ class Settings:
     @finish_sound.setter
     def finish_sound(self, v: str):
         self.set("finish_sound", v)
+    @property
+    def focus_finish_sound(self) -> str:
+        v = self.get("focus_finish_sound")
+        if isinstance(v, str) and v:
+            return v
+        # backward compatible fallback
+        return str(self.get("finish_sound") or "cuckoo")
+
+    @focus_finish_sound.setter
+    def focus_finish_sound(self, v: str) -> None:
+        self.set("focus_finish_sound", v)
+
+    @property
+    def break_finish_sound(self) -> str:
+        v = self.get("break_finish_sound")
+        if isinstance(v, str) and v:
+            return v
+        # backward compatible fallback
+        return str(self.get("finish_sound") or "cuckoo")
+
+    @break_finish_sound.setter
+    def break_finish_sound(self, v: str) -> None:
+        self.set("break_finish_sound", v)
+
+    @property
+    def sound_volume(self) -> float:
+        try:
+            value = float(self.get("sound_volume"))
+        except (TypeError, ValueError):
+            value = 0.7
+        return max(0.0, min(1.0, value))
+
+    @sound_volume.setter
+    def sound_volume(self, v: float):
+        try:
+            value = float(v)
+        except (TypeError, ValueError):
+            value = 0.7
+        self.set("sound_volume", max(0.0, min(1.0, value)))
 
     @property
     def preset_work(self) -> int:

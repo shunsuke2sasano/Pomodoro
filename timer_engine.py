@@ -44,7 +44,7 @@ class TimerEngine(QObject):
         self._total_seconds: int = 0
         self._remaining: int = 0
         self._work_count: int = 0
-        self._manual_duration: bool = True
+        self._set_count: int = 0
 
         self._qtimer = QTimer(self)
         self._qtimer.setInterval(1000)
@@ -70,6 +70,10 @@ class TimerEngine(QObject):
     def work_count(self) -> int:
         return self._work_count
 
+    @property
+    def set_count(self) -> int:
+        return self._set_count
+
     def start_or_pause(self) -> None:
         """Start/Pause toggle."""
         if self._state == TimerState.RUNNING:
@@ -78,12 +82,9 @@ class TimerEngine(QObject):
             self._start()
 
     def set_duration(self, seconds: int) -> None:
-        """Set duration from dial (IDLE/PAUSED only)."""
-        if self._state not in (TimerState.IDLE, TimerState.PAUSED):
-            return
+        """Set duration from dial."""
         max_seconds = MAX_DIAL_MIN * 60
         clamped = max(0, min(max_seconds, int(seconds)))
-        self._manual_duration = True
         self._total_seconds = clamped
         self._remaining = clamped
         self.tick.emit(self._remaining)
@@ -93,9 +94,9 @@ class TimerEngine(QObject):
         """Reset to 00:00."""
         self._qtimer.stop()
         self._state = TimerState.IDLE
-        self._manual_duration = True
         self._total_seconds = 0
         self._remaining = 0
+        self._set_count = 0
         self.tick.emit(self._remaining)
         self.state_changed.emit(self._state)
 
@@ -105,7 +106,6 @@ class TimerEngine(QObject):
         self._state = TimerState.IDLE
         self._mode = mode
         self._settings.last_mode = mode
-        self._manual_duration = False
         self._load_mode_duration()
         self.mode_changed.emit(self._mode)
         self.tick.emit(self._remaining)
@@ -146,8 +146,8 @@ class TimerEngine(QObject):
             self._state = TimerState.IDLE
             self.state_changed.emit(self._state)
             self.finished.emit(self._mode)
-            if not self._manual_duration:
-                self._advance_mode()
+            self._set_count += 1
+            self._advance_mode()
 
     def _advance_mode(self) -> None:
         """Mode progression: Work -> Short/Long -> Work."""

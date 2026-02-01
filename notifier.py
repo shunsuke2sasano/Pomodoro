@@ -3,7 +3,6 @@ Windows notifications and sounds.
 """
 
 from pathlib import Path
-import threading
 
 
 def show_notification(title: str, message: str) -> None:
@@ -44,62 +43,54 @@ try {{
         pass
 
 
-_SOUND_EFFECTS: dict[str, object] = {}
+_PLAYERS: dict[str, tuple["QMediaPlayer", "QAudioOutput"]] = {}
 _SOUND_FILES = {
-    "chime": "sounds/chime.wav",
-    "premium": "sounds/premium.wav",
+    "lion": "assets/sounds/lion.wav",
+    "mountain": "assets/sounds/mountain.wav",
+    "tombi": "assets/sounds/tombi.wav",
+    "cuckoo": "assets/sounds/cuckoo.wav",
 }
 
 
-def play_sound(sound_key: str = "beep") -> None:
+def play_sound(sound_key: str = "beep", volume: float = 0.9) -> None:
     """Play finish sound by key (best-effort)."""
-
-    def _beep() -> None:
-        try:
-            import winsound
-            winsound.Beep(880, 200)
-            winsound.Beep(1100, 150)
-        except Exception:
-            pass
-
-    if sound_key == "beep":
-        t = threading.Thread(target=_beep, daemon=True)
-        t.start()
-        return
-
     rel_path = _SOUND_FILES.get(sound_key)
     if not rel_path:
-        t = threading.Thread(target=_beep, daemon=True)
-        t.start()
         return
 
     path = Path(__file__).resolve().parent / rel_path
-    if not path.exists():
-        t = threading.Thread(target=_beep, daemon=True)
-        t.start()
-        return
-
     try:
-        from PySide6.QtMultimedia import QSoundEffect
+        from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
         from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QGuiApplication
+        from PySide6.QtWidgets import QApplication
     except Exception:
-        t = threading.Thread(target=_beep, daemon=True)
-        t.start()
         return
 
-    effect = _SOUND_EFFECTS.get(sound_key)
-    if effect is None:
-        effect = QSoundEffect()
-        effect.setSource(QUrl.fromLocalFile(str(path)))
-        effect.setLoopCount(1)
-        effect.setVolume(0.9)
-        _SOUND_EFFECTS[sound_key] = effect
-
     try:
-        effect.play()
+        if not path.exists():
+            QGuiApplication.beep()
+            return
+
+        player, audio = _PLAYERS.get(sound_key, (None, None))
+        if player is None:
+            app = QApplication.instance()
+            audio = QAudioOutput(app)
+            player = QMediaPlayer(app)
+            player.setAudioOutput(audio)
+            _PLAYERS[sound_key] = (player, audio)
+
+        audio.setVolume(max(0.0, min(1.0, float(volume))))
+         # Always refresh source & restart reliably
+        player.setSource(QUrl.fromLocalFile(str(path)))
+        player.stop()
+        player.setPosition(0)
+        player.play()
     except Exception:
-        t = threading.Thread(target=_beep, daemon=True)
-        t.start()
+        try:
+            QGuiApplication.beep()
+        except Exception:
+            return
 
 
 def _escape_xml(s: str) -> str:

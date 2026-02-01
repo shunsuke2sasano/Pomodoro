@@ -48,7 +48,6 @@ from constants import (
     MODE_SHORT,
     MODE_LONG,
     MODE_LABELS,
-    SETS_BEFORE_LONG,
     MAX_DIAL_MIN,
     THEMES,
     DEFAULT_THEME,
@@ -122,7 +121,12 @@ class PomodoroWidget(QWidget):
 
         show_notification(title, msg)
         if self._settings.sound_on:
-            play_sound(self._settings.finish_sound)
+            # Focus/Breakで終了音を分ける
+            if mode == MODE_WORK:
+                sound_key = self._settings.focus_finish_sound
+            else:
+                sound_key = self._settings.break_finish_sound
+            play_sound(sound_key, volume=self._settings.sound_volume)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.LeftButton:
@@ -161,7 +165,7 @@ class PomodoroWidget(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.LeftButton:
-            if self._press_pos is not None and not self._dragging:
+            if self._press_pos is not None and not self._dragging and self._is_in_center(self._press_pos):
                 self._engine.start_or_pause()
             self._press_pos = None
             self._press_global = None
@@ -172,11 +176,7 @@ class PomodoroWidget(QWidget):
             super().mouseReleaseEvent(event)
 
     def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key_Space:
-            self._engine.start_or_pause()
-            event.accept()
-        else:
-            super().keyPressEvent(event)
+        super().keyPressEvent(event)
 
     def closeEvent(self, event) -> None:
         self._save_position()
@@ -214,6 +214,17 @@ class PomodoroWidget(QWidget):
             TICK_LENGTH_MAJOR, TICK_LENGTH_MINOR
         ) - 2
         return r <= outer
+
+    def _is_in_center(self, pos: QPoint) -> bool:
+        cx, cy = self.width() / 2, self.height() / 2
+        dx = pos.x() - cx
+        dy = pos.y() - cy
+        r = math.hypot(dx, dy)
+        radius = min(self.width(), self.height()) / 2 - DISC_MARGIN - max(
+            TICK_LENGTH_MAJOR, TICK_LENGTH_MINOR
+        ) - 2
+        inner_radius = radius * 0.52
+        return r <= inner_radius
 
     def _current_theme(self) -> dict:
         base = THEMES.get(DEFAULT_THEME) or next(iter(THEMES.values()), {})
@@ -279,21 +290,49 @@ class PomodoroWidget(QWidget):
             act.triggered.connect(lambda checked, t=theme_key: self._set_theme(t))
 
         menu.addSeparator()
-
-        sound_menu = menu.addMenu("Finish Sound")
-        sound_group = QActionGroup(sound_menu)
-        sound_group.setExclusive(True)
+        # Focus/Break で終了音を分ける
         sound_labels = {
-            "beep": "Beep",
-            "chime": "Chime",
-            "premium": "Premium",
+            "lion": "ライオン",
+            "mountain": "夏の山",
+            "tombi": "トンビ",
+            "cuckoo": "カッコウ",
         }
+        focus_sound_menu = menu.addMenu("Focus Sound")
+        focus_group = QActionGroup(focus_sound_menu)
+        focus_group.setExclusive(True)
         for key, label in sound_labels.items():
-            act = sound_menu.addAction(label)
+            act = focus_sound_menu.addAction(label)
             act.setCheckable(True)
-            act.setChecked(self._settings.finish_sound == key)
-            act.setActionGroup(sound_group)
-            act.triggered.connect(lambda checked, k=key: self._set_finish_sound(k))
+            act.setChecked(self._settings.focus_finish_sound == key)
+            act.setActionGroup(focus_group)
+            act.triggered.connect(lambda checked, k=key: self._set_focus_finish_sound(k))
+
+        break_sound_menu = menu.addMenu("Break Sound")
+        break_group = QActionGroup(break_sound_menu)
+        break_group.setExclusive(True)
+        
+        for key, label in sound_labels.items():
+            act = break_sound_menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(self._settings.break_finish_sound == key)
+            act.setActionGroup(break_group)
+            act.triggered.connect(lambda checked, k=key: self._set_break_finish_sound(k))
+
+        menu.addSeparator()
+
+        volume_menu = menu.addMenu("Volume")
+        volume_group = QActionGroup(volume_menu)
+        volume_group.setExclusive(True)
+        volume_options = [0.3, 0.5, 0.7, 0.9]
+        current_volume = float(self._settings.sound_volume)
+        closest_volume = min(volume_options, key=lambda v: abs(v - current_volume))
+        for v in volume_options:
+            label = f"{int(v * 100)}%"
+            act = volume_menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(v == closest_volume)
+            act.setActionGroup(volume_group)
+            act.triggered.connect(lambda *_, val=v: self._set_sound_volume(val))
 
         menu.addSeparator()
 
@@ -375,6 +414,18 @@ class PomodoroWidget(QWidget):
 
     def _set_finish_sound(self, key: str) -> None:
         self._settings.finish_sound = key
+        self._settings.save()
+    
+    def _set_focus_finish_sound(self, key: str) -> None:
+        self._settings.focus_finish_sound = key
+        self._settings.save()
+
+    def _set_break_finish_sound(self, key: str) -> None:
+        self._settings.break_finish_sound = key
+        self._settings.save()
+
+    def _set_sound_volume(self, value: float) -> None:
+        self._settings.sound_volume = value
         self._settings.save()
 
     def _set_bg_opacity(self, value: int) -> None:
@@ -557,7 +608,7 @@ class PomodoroWidget(QWidget):
         )
         p.restore()
 
-        set_str = f"Set {engine.work_count + 1} / {SETS_BEFORE_LONG}"
+        set_str = f"Set {engine.set_count}"
         font_set = QFont(FONT_FAMILY, FONT_SIZE_SET, QFont.Normal)
         p.save()
         p.setFont(font_set)
