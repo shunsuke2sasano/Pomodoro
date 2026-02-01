@@ -566,7 +566,7 @@ class PomodoroWidget(QWidget):
         set_w = fm_set.horizontalAdvance(set_str)
         p.drawText(
             round(cx - set_w / 2),
-            round(cy + 28),
+            round(cy + 36),
             set_str,
         )
         p.restore()

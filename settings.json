@@ -1,13 +1,13 @@
 {
-  "window_x": 3517,
-  "window_y": 234,
+  "window_x": 3322,
+  "window_y": 189,
   "always_on_top": true,
   "sound_on": true,
-  "bg_opacity": 25,
+  "bg_opacity": 255,
   "finish_sound": "premium",
   "preset_work": 25,
   "preset_short": 5,
   "preset_long": 15,
   "last_mode": "work",
-  "theme_name": "light"
+  "theme_name": "midnight_gold"
 }
