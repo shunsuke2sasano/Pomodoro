@@ -73,6 +73,9 @@ class PomodoroWidget(QWidget):
         self._window_drag_offset: QPoint = QPoint(0, 0)
 
         self._setup_window()
+        self._ctx_menu: QMenu | None = None
+        self._ctx_actions: dict[str, object] = {}
+        self._build_context_menu()
 
         self._engine.tick.connect(self._on_tick)
         self._engine.finished.connect(self._on_finished)
@@ -246,48 +249,47 @@ class PomodoroWidget(QWidget):
         self._settings.save()
         self.update()
 
-    def _show_context_menu(self, pos: QPoint) -> None:
+    def _build_context_menu(self) -> None:
         menu = QMenu(self)
         menu.setStyleSheet(self._context_menu_stylesheet())
+        menu.aboutToShow.connect(self._update_context_menu)
 
         menu.addAction("Reset", self._engine.reset)
         menu.addSeparator()
 
         mode_menu = menu.addMenu("Mode")
+        mode_actions: dict[str, object] = {}
         for mode_key, mode_label in MODE_LABELS.items():
             act = mode_menu.addAction(mode_label)
             act.setCheckable(True)
-            act.setChecked(self._engine.mode == mode_key)
             act.triggered.connect(lambda checked, m=mode_key: self._engine.set_mode(m))
+            mode_actions[mode_key] = act
+        self._ctx_actions["mode"] = mode_actions
 
         menu.addSeparator()
 
         preset_menu = menu.addMenu("Presets")
-        preset_menu.addAction(
-            f"Work: {self._settings.preset_work} min",
-            lambda: self._change_preset("work"),
-        )
-        preset_menu.addAction(
-            f"Short Break: {self._settings.preset_short} min",
-            lambda: self._change_preset("short"),
-        )
-        preset_menu.addAction(
-            f"Long Break: {self._settings.preset_long} min",
-            lambda: self._change_preset("long"),
-        )
+        preset_actions = {
+            "work": preset_menu.addAction("Work: 0 min", lambda: self._change_preset("work")),
+            "short": preset_menu.addAction("Short Break: 0 min", lambda: self._change_preset("short")),
+            "long": preset_menu.addAction("Long Break: 0 min", lambda: self._change_preset("long")),
+        }
+        self._ctx_actions["preset"] = preset_actions
 
         menu.addSeparator()
 
         theme_menu = menu.addMenu("Theme")
         theme_group = QActionGroup(theme_menu)
         theme_group.setExclusive(True)
+        theme_actions: dict[str, object] = {}
         for theme_key, theme in THEMES.items():
             label = theme.get("label", theme_key)
             act = theme_menu.addAction(label)
             act.setCheckable(True)
-            act.setChecked(self._settings.theme_name == theme_key)
             act.setActionGroup(theme_group)
             act.triggered.connect(lambda checked, t=theme_key: self._set_theme(t))
+            theme_actions[theme_key] = act
+        self._ctx_actions["theme"] = theme_actions
 
         menu.addSeparator()
         # Focus/Break で終了音を分ける
@@ -300,23 +302,26 @@ class PomodoroWidget(QWidget):
         focus_sound_menu = menu.addMenu("Focus Sound")
         focus_group = QActionGroup(focus_sound_menu)
         focus_group.setExclusive(True)
+        focus_actions: dict[str, object] = {}
         for key, label in sound_labels.items():
             act = focus_sound_menu.addAction(label)
             act.setCheckable(True)
-            act.setChecked(self._settings.focus_finish_sound == key)
             act.setActionGroup(focus_group)
             act.triggered.connect(lambda checked, k=key: self._set_focus_finish_sound(k))
+            focus_actions[key] = act
+        self._ctx_actions["focus_sound"] = focus_actions
 
         break_sound_menu = menu.addMenu("Break Sound")
         break_group = QActionGroup(break_sound_menu)
         break_group.setExclusive(True)
-        
+        break_actions: dict[str, object] = {}
         for key, label in sound_labels.items():
             act = break_sound_menu.addAction(label)
             act.setCheckable(True)
-            act.setChecked(self._settings.break_finish_sound == key)
             act.setActionGroup(break_group)
             act.triggered.connect(lambda checked, k=key: self._set_break_finish_sound(k))
+            break_actions[key] = act
+        self._ctx_actions["break_sound"] = break_actions
 
         menu.addSeparator()
 
@@ -324,15 +329,15 @@ class PomodoroWidget(QWidget):
         volume_group = QActionGroup(volume_menu)
         volume_group.setExclusive(True)
         volume_options = [0.3, 0.5, 0.7, 0.9]
-        current_volume = float(self._settings.sound_volume)
-        closest_volume = min(volume_options, key=lambda v: abs(v - current_volume))
+        volume_actions: dict[float, object] = {}
         for v in volume_options:
             label = f"{int(v * 100)}%"
             act = volume_menu.addAction(label)
             act.setCheckable(True)
-            act.setChecked(v == closest_volume)
             act.setActionGroup(volume_group)
             act.triggered.connect(lambda *_, val=v: self._set_sound_volume(val))
+            volume_actions[v] = act
+        self._ctx_actions["volume"] = volume_actions
 
         menu.addSeparator()
 
@@ -340,35 +345,90 @@ class PomodoroWidget(QWidget):
         transparency_group = QActionGroup(transparency_menu)
         transparency_group.setExclusive(True)
         percent_options = list(range(10, 101, 10))
-        current_alpha = int(self._settings.bg_opacity)
-        alpha_values = [int(255 * p / 100) for p in percent_options]
-        closest_alpha = min(alpha_values, key=lambda a: abs(a - current_alpha))
-        for p, alpha in zip(percent_options, alpha_values):
+        transparency_actions: dict[int, object] = {}
+        for p in percent_options:
             label = f"{p}%"
             if p == 100:
                 label = "100% (Solid)"
+            alpha = int(255 * p / 100)
             act = transparency_menu.addAction(label)
             act.setCheckable(True)
-            act.setChecked(alpha == closest_alpha)
             act.setActionGroup(transparency_group)
             act.triggered.connect(lambda checked, v=alpha: self._set_bg_opacity(v))
+            transparency_actions[alpha] = act
+        self._ctx_actions["transparency"] = transparency_actions
 
         menu.addSeparator()
 
         aot_action = menu.addAction("Always on Top")
         aot_action.setCheckable(True)
-        aot_action.setChecked(self._settings.always_on_top)
         aot_action.triggered.connect(self._toggle_always_on_top)
+        self._ctx_actions["aot"] = aot_action
 
         sound_action = menu.addAction("Sound On/Off")
         sound_action.setCheckable(True)
-        sound_action.setChecked(self._settings.sound_on)
         sound_action.triggered.connect(self._toggle_sound)
+        self._ctx_actions["sound_on"] = sound_action
 
         menu.addSeparator()
         menu.addAction("Quit", self.close)
 
-        menu.exec(pos)
+        self._ctx_menu = menu
+
+    def _update_context_menu(self) -> None:
+        mode_actions = self._ctx_actions.get("mode", {})
+        for mode_key, act in mode_actions.items():
+            act.setChecked(self._engine.mode == mode_key)
+
+        preset_actions = self._ctx_actions.get("preset", {})
+        if "work" in preset_actions:
+            preset_actions["work"].setText(f"Work: {self._settings.preset_work} min")
+        if "short" in preset_actions:
+            preset_actions["short"].setText(f"Short Break: {self._settings.preset_short} min")
+        if "long" in preset_actions:
+            preset_actions["long"].setText(f"Long Break: {self._settings.preset_long} min")
+
+        theme_actions = self._ctx_actions.get("theme", {})
+        for theme_key, act in theme_actions.items():
+            act.setChecked(self._settings.theme_name == theme_key)
+
+        focus_actions = self._ctx_actions.get("focus_sound", {})
+        for key, act in focus_actions.items():
+            act.setChecked(self._settings.focus_finish_sound == key)
+
+        break_actions = self._ctx_actions.get("break_sound", {})
+        for key, act in break_actions.items():
+            act.setChecked(self._settings.break_finish_sound == key)
+
+        volume_actions = self._ctx_actions.get("volume", {})
+        if volume_actions:
+            current_volume = float(self._settings.sound_volume)
+            closest_volume = min(volume_actions.keys(), key=lambda v: abs(v - current_volume))
+            for v, act in volume_actions.items():
+                act.setChecked(v == closest_volume)
+
+        transparency_actions = self._ctx_actions.get("transparency", {})
+        if transparency_actions:
+            current_alpha = int(self._settings.bg_opacity)
+            closest_alpha = min(transparency_actions.keys(), key=lambda a: abs(a - current_alpha))
+            for alpha, act in transparency_actions.items():
+                act.setChecked(alpha == closest_alpha)
+
+        aot_action = self._ctx_actions.get("aot")
+        if aot_action is not None:
+            aot_action.setChecked(self._settings.always_on_top)
+
+        sound_action = self._ctx_actions.get("sound_on")
+        if sound_action is not None:
+            sound_action.setChecked(self._settings.sound_on)
+
+    def _show_context_menu(self, pos: QPoint) -> None:
+        if self._ctx_menu is None:
+            self._build_context_menu()
+        self._update_context_menu()
+        if self._ctx_menu is not None:
+            self._ctx_menu.exec(pos)
+        return
 
     def _change_preset(self, preset_type: str) -> None:
         from PySide6.QtWidgets import QInputDialog
@@ -608,7 +668,7 @@ class PomodoroWidget(QWidget):
         )
         p.restore()
 
-        set_str = f"Set {engine.set_count}"
+        set_str = f"Set {engine.set_count + 1}"
         font_set = QFont(FONT_FAMILY, FONT_SIZE_SET, QFont.Normal)
         p.save()
         p.setFont(font_set)

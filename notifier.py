@@ -3,44 +3,54 @@ Windows notifications and sounds.
 """
 
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+    from PySide6.QtWidgets import QSystemTrayIcon
+
+
+_TRAY: "QSystemTrayIcon | None" = None
+_TRAY_INITIALIZED = False
+
+
+def init_tray(icon_path: str | None = None) -> None:
+    """Initialize system tray icon (best-effort)."""
+    global _TRAY, _TRAY_INITIALIZED
+    if _TRAY_INITIALIZED:
+        return
+    try:
+        from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+        from PySide6.QtGui import QIcon
+    except Exception:
+        return
+    app = QApplication.instance()
+    if app is None:
+        return
+    if not QSystemTrayIcon.isSystemTrayAvailable():
+        return
+    try:
+        tray = QSystemTrayIcon(app)
+        if icon_path:
+            tray.setIcon(QIcon(icon_path))
+        tray.show()
+        _TRAY = tray
+        _TRAY_INITIALIZED = True
+    except Exception:
+        return
 
 
 def show_notification(title: str, message: str) -> None:
-    """Show a Windows toast notification (best-effort)."""
+    """Show a tray balloon notification (best-effort)."""
+    init_tray()
+    tray = _TRAY
+    if tray is None:
+        return
     try:
-        import subprocess
-
-        ps_code = f'''
-$notification = [Windows.UI.Notifications.ToastNotificationManager,
-    Windows.UI.Notifications,ContentType=WindowsRuntime]
-try {{
-    $app = "Microsoft.WindowsTerminal"
-    $toaster = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($app)
-    $xmlString = @"
-<toast version="2">
-  <visual>
-    <binding template="ToastBasic">
-      <text id="1">{_escape_xml(title)}</text>
-      <text id="2">{_escape_xml(message)}</text>
-    </binding>
-  </visual>
-</toast>
-"@
-    $xmlDoc = [Windows.Data.Xml.Dom.XmlDocument]::new()
-    $xmlDoc.LoadXml($xmlString)
-    $toast = [Windows.UI.Notifications.ToastNotification]::new($xmlDoc)
-    $toaster.Show($toast)
-}} catch {{
-    # Fail silently.
-}}
-'''
-        subprocess.Popen(
-            ["powershell", "-WindowStyle", "Hidden", "-NoProfile", "-Command", ps_code],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        from PySide6.QtWidgets import QSystemTrayIcon
+        tray.showMessage(title, message, QSystemTrayIcon.Information, 5000)
     except Exception:
-        pass
+        return
 
 
 _PLAYERS: dict[str, tuple["QMediaPlayer", "QAudioOutput"]] = {}
@@ -93,12 +103,29 @@ def play_sound(sound_key: str = "beep", volume: float = 0.9) -> None:
             return
 
 
-def _escape_xml(s: str) -> str:
-    """Escape XML special characters."""
-    return (
-        s.replace("&", "&amp;")
-         .replace("<", "&lt;")
-         .replace(">", "&gt;")
-         .replace('"', "&quot;")
-         .replace("'", "&apos;")
-    )
+def prewarm_sounds() -> None:
+    """Preload sound players to reduce first-play latency."""
+    try:
+        from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+        from PySide6.QtCore import QUrl
+        from PySide6.QtWidgets import QApplication
+    except Exception:
+        return
+
+    app = QApplication.instance()
+    if app is None:
+        return
+    for sound_key, rel_path in _SOUND_FILES.items():
+        path = Path(__file__).resolve().parent / rel_path
+        if not path.exists():
+            continue
+        if sound_key in _PLAYERS:
+            continue
+        try:
+            audio = QAudioOutput(app)
+            player = QMediaPlayer(app)
+            player.setAudioOutput(audio)
+            player.setSource(QUrl.fromLocalFile(str(path)))
+            _PLAYERS[sound_key] = (player, audio)
+        except Exception:
+            continue

@@ -4,3 +4,6 @@ __pycache__/
 
 # User settings
 settings.json
+
+#Sounds (user local)
+assets/sounds/

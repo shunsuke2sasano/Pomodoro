@@ -39,7 +39,8 @@ class TimerEngine(QObject):
         super().__init__(parent)
         self._settings = settings
 
-        self._mode: str = settings.last_mode
+        self._mode: str = MODE_WORK
+        self._settings.last_mode = MODE_WORK
         self._state: str = TimerState.IDLE
         self._total_seconds: int = 0
         self._remaining: int = 0
